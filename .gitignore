@@ -1,0 +1,14 @@
+# Terraform local state and binaries
+terraform/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform.lock.hcl
+terraform.exe
+*.exe
+
+# Python / OS artifacts
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
