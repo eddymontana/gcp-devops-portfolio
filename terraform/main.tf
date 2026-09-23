@@ -1,5 +1,6 @@
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.5.0"
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -13,54 +14,117 @@ provider "google" {
   region  = var.region
 }
 
-# Automatically enable required Google Cloud APIs
+# ------------------------------------------------------------------------------
+# 1. Enable Required Cloud Run & Artifact Registry APIs
+# ------------------------------------------------------------------------------
 resource "google_project_service" "apis" {
   for_each = toset([
-    "compute.googleapis.com",
-    "container.googleapis.com",
+    "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "iam.googleapis.com"
   ])
+
+  project            = var.project_id
   service            = each.key
   disable_on_destroy = false
 }
 
-# Create a Custom VPC Network
-resource "google_compute_network" "vpc" {
-  name                    = "portfolio-vpc"
-  auto_create_subnetworks = false
-  depends_on              = [google_project_service.apis]
-}
-
-# Create a Subnet for the GKE Cluster
-resource "google_compute_subnetwork" "subnet" {
-  name          = "portfolio-subnet"
-  ip_cidr_range = "10.0.0.0/24"
-  region        = var.region
-  network       = google_compute_network.vpc.id
-  depends_on    = [google_project_service.apis]
-}
-
-# Create an Artifact Registry Repository to store Docker Images
+# ------------------------------------------------------------------------------
+# 2. Artifact Registry (Stores the FastAPI Container Images)
+# ------------------------------------------------------------------------------
 resource "google_artifact_registry_repository" "repo" {
   location      = var.region
   repository_id = "portfolio-app-repo"
-  description   = "Docker repository for DevOps Portfolio"
+  description   = "Docker repository for DevOps Portfolio FastAPI app"
   format        = "DOCKER"
-  depends_on    = [google_project_service.apis]
-}
-
-# Create the GKE Autopilot Cluster
-resource "google_container_cluster" "gke" {
-  name     = "portfolio-gke-cluster"
-  location = var.region
-
-  network    = google_compute_network.vpc.name
-  subnetwork = google_compute_subnetwork.subnet.name
-
-  enable_autopilot = true
-
-  deletion_protection = false
 
   depends_on = [google_project_service.apis]
+}
+
+# ------------------------------------------------------------------------------
+# 3. Dedicated Service Account for Cloud Run Runtime
+# ------------------------------------------------------------------------------
+resource "google_service_account" "cloud_run_sa" {
+  account_id   = "portfolio-cloudrun-sa"
+  display_name = "Portfolio Cloud Run Service Account"
+
+  depends_on = [google_project_service.apis]
+}
+
+# ------------------------------------------------------------------------------
+# 4. Cloud Run Service (Initial Placeholder deployment; CI/CD updates image)
+# ------------------------------------------------------------------------------
+resource "google_cloud_run_v2_service" "app" {
+  name     = "portfolio-app-service"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  template {
+    service_account = google_service_account.cloud_run_sa.email
+
+    scaling {
+      min_instance_count = 0  # Scales to $0 cost when idle
+      max_instance_count = 5  # Prevents unexpected traffic spikes from costing money
+    }
+
+    containers {
+      # Bootstrap image so Terraform can provision the resource before GitHub Actions builds your code
+      image = "us-docker.pkg.dev/cloudrun/container/hello"
+
+      ports {
+        container_port = 8000
+      }
+
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = "512Mi"
+        }
+      }
+
+      startup_probe {
+        http_get {
+          path = "/healthz"
+          port = 8000
+        }
+        initial_delay_seconds = 0
+        timeout_seconds       = 3
+        period_seconds        = 5
+        failure_threshold     = 3
+      }
+
+      liveness_probe {
+        http_get {
+          path = "/healthz"
+          port = 8000
+        }
+        period_seconds = 10
+      }
+    }
+  }
+
+  lifecycle {
+    # Ignore image changes made by GitHub Actions pipeline pushes
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_artifact_registry_repository.repo
+  ]
+}
+
+# ------------------------------------------------------------------------------
+# 5. Allow Public (Unauthenticated) Access to the Portfolio Service
+# ------------------------------------------------------------------------------
+resource "google_cloud_run_v2_service_iam_member" "public_access" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.app.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }

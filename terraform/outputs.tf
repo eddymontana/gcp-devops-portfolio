@@ -1,14 +1,14 @@
-output "artifact_registry_url" {
+output "cloud_run_url" {
+  description = "The public URL of the deployed Cloud Run service"
+  value       = google_cloud_run_v2_service.app.uri
+}
+
+output "artifact_registry_repo" {
+  description = "The URI of the Artifact Registry Docker repository"
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.repo.repository_id}"
-  description = "The URL route for your Artifact Registry Docker repository"
 }
 
-output "gke_cluster_name" {
-  value       = google_container_cluster.gke.name
-  description = "The name of your deployed GKE cluster"
-}
-
-output "region" {
-  value       = var.region
-  description = "GCP Region"
+output "service_account_email" {
+  description = "The email of the Cloud Run runtime service account"
+  value       = google_service_account.cloud_run_sa.email
 }

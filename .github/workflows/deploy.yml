@@ -1,4 +1,4 @@
-name: Build, Push, and Deploy to GKE
+name: Build, Push, and Deploy to Cloud Run
 
 on:
   push:
@@ -10,12 +10,12 @@ env:
   PROJECT_ID: vocal-byte-509214-b1
   REGION: us-central1
   GAR_REPOSITORY: portfolio-app-repo
-  GKE_CLUSTER: portfolio-gke-cluster
+  SERVICE_NAME: portfolio-app-service
   IMAGE_NAME: app
 
 jobs:
   build-and-deploy:
-    name: Build & Deploy Application
+    name: Build & Deploy to Cloud Run
     runs-on: ubuntu-latest
 
     permissions:
@@ -50,18 +50,11 @@ jobs:
           docker build -t $IMAGE_TAG ./app
           docker push $IMAGE_TAG
 
-      # 5. Get GKE Credentials
-      - name: Get GKE Credentials
-        uses: google-github-actions/get-gke-credentials@v2
+      # 5. Deploy Container to Cloud Run
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
         with:
-          cluster_name: ${{ env.GKE_CLUSTER }}
-          location: ${{ env.REGION }}
-
-      # 6. Substitute Image Placeholder and Deploy to GKE
-      - name: Deploy to GKE
-        env:
-          IMAGE_TAG: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-        run: |-
-          sed -i "s|IMAGE_PLACEHOLDER|$IMAGE_TAG|g" k8s/k8s.yml
-          kubectl apply -f k8s/k8s.yml
-          kubectl rollout status deployment/portfolio-app-deployment --timeout=180s
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          flags: '--allow-unauthenticated --port=8000'

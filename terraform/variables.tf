@@ -1,11 +1,16 @@
 variable "project_id" {
+  description = "The GCP Project ID where resources will be deployed"
   type        = string
-  default     = "vocal-byte-509214-b1"
-  description = "The target GCP Project ID"
 }
 
 variable "region" {
+  description = "The default GCP region for deployment"
   type        = string
   default     = "us-central1"
-  description = "The target GCP region for all infrastructure resources"
+}
+
+variable "app_name" {
+  description = "The base name for the application resources"
+  type        = string
+  default     = "portfolio-app"
 }
