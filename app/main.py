@@ -14,7 +14,7 @@ def read_root():
     }
 
 # Liveness Probe: Checks if the container process is alive
-@app.get("/healthz")
+@app.get("/health")
 def health_check():
     return {"status": "healthy"}
 
