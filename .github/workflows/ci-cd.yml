@@ -10,6 +10,7 @@ env:
   PROJECT_ID: vocal-byte-509214-b1
   REGION: us-central1
   REPOSITORY: portfolio-app-repo
+  SERVICE: portfolio-app-service
 
 jobs:
   test:
@@ -35,8 +36,8 @@ jobs:
           PYTHONPATH: .
         run: pytest -v
 
-  build-and-push:
-    name: Build and Push to Artifact Registry
+  build-and-deploy:
+    name: Build, Push and Deploy to Cloud Run
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -47,18 +48,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Authenticate to Google Cloud via Workload Identity Federation (Keyless)
+      # 1. Authenticate to Google Cloud via Workload Identity Federation
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: 'projects/1032668331090/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
           service_account: 'github-actions-sa@vocal-byte-509214-b1.iam.gserviceaccount.com'
 
-      # Configure Docker client for Artifact Registry
+      # 2. Configure Docker client for Artifact Registry
       - name: Configure Docker Client
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      # Build and Push Docker Image
+      # 3. Build and Push Docker Image
       - name: Build and Push Docker Image
         run: |
           IMAGE_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/app:${{ github.sha }}"
@@ -67,3 +68,12 @@ jobs:
           docker build -t $IMAGE_TAG -t $LATEST_TAG .
           docker push $IMAGE_TAG
           docker push $LATEST_TAG
+
+      # 4. Deploy to Google Cloud Run
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/app:${{ github.sha }}
+          flags: '--allow-unauthenticated'
