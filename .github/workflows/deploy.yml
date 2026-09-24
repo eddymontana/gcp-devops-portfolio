@@ -50,11 +50,11 @@ jobs:
           docker build -t $IMAGE_TAG ./app
           docker push $IMAGE_TAG
 
-      # 5. Deploy Container to Cloud Run
+      # 5. Deploy Container to Cloud Run with Probes and Port 8080
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          flags: '--allow-unauthenticated --port=8000'
+          flags: '--allow-unauthenticated --port=8080 --startup-probe=httpGet.path=/health,httpGet.port=8080 --liveness-probe=httpGet.path=/health,httpGet.port=8080'
